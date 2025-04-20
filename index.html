@@ -2,59 +2,73 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <title>DUY BẢO MÁY BAY TOOL V2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DUY BẢO MÁY BAY TOOL V5</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
     body {
-      background: #000;
+      margin: 0;
+      padding: 0;
+      background: black;
       color: lime;
       font-family: Arial, sans-serif;
       text-align: center;
-      padding: 30px;
+      overflow: hidden;
     }
     .box {
-      border: 2px solid lime;
-      border-radius: 15px;
       padding: 20px;
       max-width: 400px;
       margin: auto;
-      box-shadow: 0 0 20px lime;
     }
     input, button {
-      padding: 10px;
-      width: 90%;
-      margin: 10px;
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
       font-size: 16px;
-      border-radius: 8px;
+      border-radius: 10px;
       border: none;
     }
     button {
-      background-color: lime;
+      background: lime;
       color: black;
       font-weight: bold;
-      cursor: pointer;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 20px;
+      color: yellow;
+      text-shadow: 0 0 10px yellow;
     }
     .hidden {
       display: none;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: -1;
     }
   </style>
 </head>
 <body>
 
+  <canvas id="sky"></canvas>
+
   <div class="box" id="authBox">
-    <h2>XÁC THỰC KEY</h2>
-    <input id="email" type="email" placeholder="Gmail được cấp">
-    <input id="key" type="text" placeholder="Key được cấp">
-    <button onclick="kiemTraKey()">TIẾP TỤC</button>
-    <p id="authMsg"></p>
+    <h2>XÁC THỰC</h2>
+    <input type="email" id="email" placeholder="Gmail được cấp">
+    <input type="text" id="key" placeholder="Key được cấp">
+    <button onclick="kiemTraKey()">VÀO TOOL</button>
+    <p id="authMsg" style="color: orange;"></p>
   </div>
 
   <div class="box hidden" id="mainBox">
-    <h2>PHÂN TÍCH MÁY BAY</h2>
-    <input id="lastX" type="text" placeholder="Nhập phiên gần nhất (VD: x1.23)">
+    <h2>DỰ ĐOÁN MÁY BAY</h2>
+    <input type="text" id="lastX" placeholder="Nhập phiên gần nhất (VD: x1.25)">
     <button onclick="phanTich()">PHÂN TÍCH</button>
-    <p id="ketqua"></p>
+    <div id="output"></div>
   </div>
 
   <script>
@@ -79,7 +93,7 @@
       const data = snap.val();
 
       if (!data || data.email !== email) {
-        msg.innerText = "Sai Gmail hoặc key không tồn tại!";
+        msg.innerText = "Sai Gmail hoặc key!";
         return;
       }
 
@@ -97,22 +111,64 @@
 
     function phanTich() {
       const raw = document.getElementById("lastX").value.trim();
-      const ketqua = document.getElementById("ketqua");
-
+      const output = document.getElementById("output");
       if (!raw.startsWith("x") || isNaN(parseFloat(raw.slice(1)))) {
-        ketqua.innerText = "Sai định dạng! VD đúng: x1.23";
+        output.innerText = "Sai định dạng! VD: x1.25";
         return;
       }
 
       const x = parseFloat(raw.slice(1));
       let msg = "";
+      let level = 0;
 
-      if (x <= 1.10) msg = "Dễ bật cao! Phiên sau có thể lên x5+";
-      else if (x <= 1.50) msg = "Khả năng hồi nhẹ: x2–x3";
-      else if (x <= 3.00) msg = "Khả năng dao động trung bình: x1.5–x4";
-      else msg = "Phiên nổ cao rồi! Coi chừng nổ sớm kế tiếp!";
+      if (x <= 1.05) { msg = "Khả năng cao phiên sau nổ cực lớn!"; level = 10; }
+      else if (x <= 1.5) { msg = "Dễ hồi lên x2–x5 ở phiên tới!"; level = 5; }
+      else if (x <= 3.0) { msg = "Khả năng dao động, nên vào sớm."; level = 3; }
+      else { msg = "Cảnh báo! Dễ nổ sớm – né phiên tiếp theo!"; level = 1; }
 
-      ketqua.innerText = msg;
+      output.innerText = msg;
+      logKetQua(x, msg);
+      animatePlane(level);
+    }
+
+    function logKetQua(x, msg) {
+      const email = document.getElementById("email").value.trim();
+      const key = document.getElementById("key").value.trim();
+      db.ref("logs").push({
+        email,
+        key,
+        lastX: x,
+        prediction: msg,
+        time: new Date().toLocaleString()
+      });
+    }
+
+    // Máy bay bay lên rồi nổ
+    const canvas = document.getElementById("sky");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    let y = canvas.height;
+
+    function animatePlane(level) {
+      y = canvas.height;
+      const interval = setInterval(() => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "red";
+        ctx.beginPath();
+        ctx.moveTo(100, y);
+        ctx.lineTo(110, y - 10);
+        ctx.lineTo(120, y);
+        ctx.closePath();
+        ctx.fill();
+        y -= level * 5;
+        if (y < 50) {
+          clearInterval(interval);
+          ctx.font = "24px Arial";
+          ctx.fillStyle = "orange";
+          ctx.fillText("BOOM!", 90, y);
+        }
+      }, 50);
     }
   </script>
 </body>
