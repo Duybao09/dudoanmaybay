@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DUY BẢO MÁY BAY TOOL V5.1</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: lime;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      overflow: hidden;
+    }
+    .box {
+      max-width: 400px;
+      margin: auto;
+      padding: 20px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+    }
+    button {
+      background: lime;
+      color: black;
+      font-weight: bold;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 20px;
+      font-weight: bold;
+      color: yellow;
+    }
+    .hidden {
+      display: none;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="sky"></canvas>
+
+<div class="box" id="authBox">
+  <h2>XÁC THỰC</h2>
+  <input id="email" type="email" placeholder="Gmail được cấp">
+  <input id="key" type="text" placeholder="Key được cấp">
+  <button onclick="kiemTraKey()">VÀO TOOL</button>
+  <div id="authMsg" style="margin-top:10px;color:orange;"></div>
+</div>
+
+<div class="box hidden" id="mainBox">
+  <h2>DỰ ĐOÁN MÁY BAY</h2>
+  <input id="lastX" type="text" placeholder="Nhập phiên gần nhất (VD: x1.25)">
+  <button onclick="phanTich()">PHÂN TÍCH</button>
+  <div id="output"></div>
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDV-WnnRBzNGaJjCmJMY7NOWEPFioHOioU",
+    authDomain: "duybao-v11.firebaseapp.com",
+    databaseURL: "https://duybao-v11-default-rtdb.firebaseio.com",
+    projectId: "duybao-v11",
+    storageBucket: "duybao-v11.appspot.com",
+    messagingSenderId: "637858629893",
+    appId: "1:637858629893:web:ad4d6de4f0f191b22b4f6c"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  async function kiemTraKey() {
+    const email = document.getElementById("email").value.trim();
+    const key = document.getElementById("key").value.trim();
+    const msg = document.getElementById("authMsg");
+
+    const snap = await db.ref("keys/" + key).get();
+    const data = snap.val();
+
+    if (!data || data.email !== email) {
+      msg.innerText = "Sai Gmail hoặc key!";
+      return;
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    if (data.expire < today || data.used >= data.maxUse) {
+      msg.innerText = "Key đã hết hạn hoặc vượt lượt!";
+      return;
+    }
+
+    await db.ref("keys/" + key + "/used").set(data.used + 1);
+    document.getElementById("authBox").classList.add("hidden");
+    document.getElementById("mainBox").classList.remove("hidden");
+  }
+
+  function phanTich() {
+    const raw = document.getElementById("lastX").value.trim();
+    const output = document.getElementById("output");
+
+    if (!raw.startsWith("x") || isNaN(parseFloat(raw.slice(1)))) {
+      output.innerText = "Sai định dạng! Nhập kiểu: x1.25";
+      return;
+    }
+
+    const x = parseFloat(raw.slice(1));
+    let duDoanX = 1;
+
+    if (x <= 1.05) duDoanX = randomFloat(5.0, 10.0);
+    else if (x <= 1.5) duDoanX = randomFloat(2.5, 5.0);
+    else if (x <= 3.0) duDoanX = randomFloat(1.7, 2.4);
+    else duDoanX = randomFloat(1.05, 1.35);
+
+    duDoanX = parseFloat(duDoanX.toFixed(2));
+    output.innerText = `DỰ ĐOÁN: Phiên sau có thể lên x${duDoanX}`;
+    logKetQua(x, duDoanX);
+    animatePlane(duDoanX);
+  }
+
+  function logKetQua(x, duDoanX) {
+    const email = document.getElementById("email").value.trim();
+    const key = document.getElementById("key").value.trim();
+    db.ref("logs").push({
+      email,
+      key,
+      lastX: x,
+      predictedX: duDoanX,
+      time: new Date().toLocaleString()
+    });
+  }
+
+  function randomFloat(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  // Hiệu ứng máy bay
+  const canvas = document.getElementById("sky");
+  const ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  let y = canvas.height;
+
+  function animatePlane(duDoanX) {
+    y = canvas.height;
+    let counter = 0;
+    const maxHeight = canvas.height - (duDoanX * 40);
+
+    const interval = setInterval(() => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.moveTo(100, y);
+      ctx.lineTo(110, y - 10);
+      ctx.lineTo(120, y);
+      ctx.closePath();
+      ctx.fill();
+
+      y -= 5;
+      counter++;
+
+      if (y < maxHeight) {
+        clearInterval(interval);
+        ctx.font = "24px Arial";
+        ctx.fillStyle = "orange";
+        ctx.fillText("BOOM!", 90, y);
+      }
+    }, 50);
+  }
+</script>
+
+</body>
+</html>
